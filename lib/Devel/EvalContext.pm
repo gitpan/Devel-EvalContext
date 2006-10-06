@@ -1,17 +1,21 @@
 package Devel::EvalContext;
 
-{ package; sub Devel::EvalContext::_hygenic_eval { eval $_[0] } }
+{ package main; sub Devel::EvalContext::_hygenic_eval { eval $_[0] } }
 
 use strict;
 use warnings;
 
-use B::Deparse;
 use PadWalker qw(peek_sub);
 use Carp;
 use Data::Alias qw(alias);
-use YAML ();
+use B ();
 
-our $VERSION = "0.07";
+our $VERSION = "0.08";
+
+# TODO: add toggleable tracing
+# runtime is probably best
+
+our $TRACING = 0;
 
 # public interface needs:
 #
@@ -24,8 +28,15 @@ our $VERSION = "0.07";
 # global vars allowing bits to talk without using closures or lexicals
 our $_new_context;
 
+sub _warn {
+  warn $_[0] if $TRACING;
+}
 sub _warnblock {
-  warn "  | $_\n" for split /\n/, $_[0];
+  _warn "  | $_\n" for split /\n/, $_[0];
+}
+sub _warndump {
+  require YAML;
+  _warnblock(YAML::Dump($_[0]));
 }
 
 sub _magic_code {
@@ -41,7 +52,7 @@ sub _magic_code {
 
 sub _save_context {
   my $evalcv = delete $_new_context->{evalcv};
-  warn "saving context for " . $evalcv->object_2svref . "\n";
+  _warn "saving context for " . $evalcv->object_2svref . "\n";
 
   $_new_context->{saved}++; # this confirms that the code has been compiled
 
@@ -50,7 +61,7 @@ sub _save_context {
   $_new_context->{vars} = {};
   while (my ($key, $val) = each %$v) {
     next if $key =~ /^.__repl_/;
-    warn "  processing: $key => $val\n";
+    _warn "  processing: $key => $val\n";
     $_new_context->{vars}{$key} = $val;
   }
 
@@ -65,11 +76,20 @@ sub _save_context {
 # New context
 sub new { return bless \{}, $_[0] }
 
+sub trace {
+  my ($s, $t) = @_;
+  if ($t) {
+    $$s->{trace} = $t;
+  }
+  return $$s->{trace};
+}
+
 # Run a context
 sub run {
   my ($cxt, $code) = @_;
-  warn "+" . ("-" x 71) . "\n";
-  warn "context_eval: {$code} using $cxt/$$cxt\n";
+  local $TRACING = $$cxt->{trace};
+  _warn "+" . ("-" x 71) . "\n";
+  _warn "context_eval: {$code} using $cxt/$$cxt\n";
 
   local $_new_context = undef;
 
@@ -112,17 +132,20 @@ sub run {
   # TODO: make this eval hygenic
   my $evaluator = eval do {
     my $m = _magic_code($recreate_context);
-    warn "magic_code:\n"; _warnblock $m;
+    _warn "magic_code:\n"; _warnblock $m;
     $m
   };
   if ($@) {
     croak "Devel::EvalContext::run: internal error: $@";
   }
 
-  warn "evaluator:\n"; _warnblock(B::Deparse->new->coderef2text($evaluator));
+  if ($TRACING) {
+    require B::Deparse;
+    _warn "evaluator:\n"; _warnblock(B::Deparse->new->coderef2text($evaluator));
+  }
 
   $code = qq[$prologue\n#line 1 "<interactive>"\n$code\n];
-  warn "code:\n"; _warnblock($code);
+  _warn "code:\n"; _warnblock($code);
 
   my $user_retval = $evaluator->($code);
   my $user_error = $@;
@@ -139,9 +162,11 @@ sub run {
     # This does the same thing as the variable mentioning in the prologue
     $_new_context->{vars} = {%{$$cxt->{vars}}, %{$_new_context->{vars}}};
 
-    warn "new context:\n";
-    _warnblock(YAML::Dump($_new_context));
+    _warn "new context:\n";
+    _warndump($_new_context);
   }
+
+  $_new_context->{trace} = $TRACING;
 
   if (ref($user_error) or $user_error ne '') {
     if ($_new_context->{saved}) { # runtime error
@@ -158,7 +183,7 @@ sub run {
   croak "Devel::EvalContext::run: internal error: not saved but no error"
     unless $_new_context->{saved};
 
-  warn "retval: $user_retval\n";
+  _warn "retval: $user_retval\n";
 
   $$cxt = $_new_context;
   return (undef, $user_retval);

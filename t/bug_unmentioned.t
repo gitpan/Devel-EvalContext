@@ -16,5 +16,5 @@ is($CommVar, "5 6");
 $cxt = Devel::EvalContext->new;
 $cxt->run(q{my @a = (1, 2, 3); my %b = (a => 1, b => 2, c => 3);});
 $cxt->run(q{my $c = 7;});
-$cxt->run(q{$::CommVar = "@a @b{a,b,c} $c"});
+$cxt->run(q{$::CommVar = "@a @b{qw(a b c)} $c"});
 is($CommVar, "1 2 3 1 2 3 7");

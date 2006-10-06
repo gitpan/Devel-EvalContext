@@ -1,4 +1,4 @@
-#!/usr/bin/env perl
+#!perl
 
 use strict;
 use warnings;
@@ -20,6 +20,8 @@ while(defined(my $code = prompt("> "))) {
     } elsif ($1 eq "dump") {
       require YAML;
       print YAML::Dump $cxt;
+    } elsif ($1 eq "trace") {
+      $cxt->trace(not $cxt->trace);
     } else {
       print "unknown command\n";
     }
