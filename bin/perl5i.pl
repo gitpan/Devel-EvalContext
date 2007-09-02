@@ -8,6 +8,10 @@ use Devel::EvalContext;
 
 my $cxt = Devel::EvalContext->new;
 
+GetOptions(
+  "trace" => sub { $cxt->trace(1) },
+) or die "argument parsing error";
+
 sub prompt {
   print "> ";
   <STDIN>;

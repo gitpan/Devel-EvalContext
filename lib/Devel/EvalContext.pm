@@ -10,10 +10,7 @@ use Carp;
 use Data::Alias qw(alias);
 use B ();
 
-our $VERSION = "0.08";
-
-# TODO: add toggleable tracing
-# runtime is probably best
+our $VERSION = "0.09";
 
 our $TRACING = 0;
 
@@ -29,7 +26,7 @@ our $TRACING = 0;
 our $_new_context;
 
 sub _warn {
-  warn $_[0] if $TRACING;
+  warn @_ if $TRACING;
 }
 sub _warnblock {
   _warn "  | $_\n" for split /\n/, $_[0];
@@ -52,7 +49,7 @@ sub _magic_code {
 
 sub _save_context {
   my $evalcv = delete $_new_context->{evalcv};
-  _warn "saving context for " . $evalcv->object_2svref . "\n";
+  _warn "saving context for ", $evalcv->object_2svref, "\n";
 
   $_new_context->{saved}++; # this confirms that the code has been compiled
 
@@ -88,8 +85,8 @@ sub trace {
 sub run {
   my ($cxt, $code) = @_;
   local $TRACING = $$cxt->{trace};
-  _warn "+" . ("-" x 71) . "\n";
-  _warn "context_eval: {$code} using $cxt/$$cxt\n";
+  _warn "+", ("-" x 71), "\n";
+  _warn "context_eval: {", $code, "} using ", $cxt, "/", $$cxt, "\n";
 
   local $_new_context = undef;
 
@@ -105,7 +102,7 @@ sub run {
   for my $var_name (keys %{$$cxt->{vars}}) {
     my $sigil = substr $var_name, 0, 1;
     $recreate_context .=
-      qq[Data::Alias::alias my $var_name = ] .
+      qq[my $var_name; Data::Alias::alias $var_name = ] .
       qq[$sigil\{\$\$cxt->{vars}->{'$var_name'}};\n];
   }
   $recreate_context .= qq[package main;\n];
@@ -183,7 +180,7 @@ sub run {
   croak "Devel::EvalContext::run: internal error: not saved but no error"
     unless $_new_context->{saved};
 
-  _warn "retval: $user_retval\n";
+  _warn "retval: ", $user_retval, "\n";
 
   $$cxt = $_new_context;
   return (undef, $user_retval);
